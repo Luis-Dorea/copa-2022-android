@@ -1,11 +1,12 @@
 package me.dio.copa.catar.Features
 
 import android.os.Bundle
-import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,7 +20,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.Card
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
+import androidx.compose.material.rememberScaffoldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -31,15 +34,21 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.lifecycleScope
 import coil.compose.AsyncImage
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import me.dio.copa.catar.R
 import me.dio.copa.catar.domain.extensions.getDate
 import me.dio.copa.catar.domain.model.MatchDomain
 import me.dio.copa.catar.domain.model.TeamDomain
+import me.dio.copa.catar.extensions.observe
+import me.dio.copa.catar.notification.scheduler.extensions.NotificationMatcherWorker
 import me.dio.copa.catar.ui.theme.Copa2022Theme
 import me.dio.copa.catar.ui.theme.Shapes
 import kotlin.getValue
+
+typealias NotificationOnClick = (match: MatchDomain) -> Unit
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -48,19 +57,51 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        observeActions()
         setContent {
             Copa2022Theme {
-               val state by viewModel.state.collectAsState()
-                MainScreen(matches = state.matches)
+                Scaffold { innerPadding ->
+                    val state by viewModel.state.collectAsState()
+                    MainScreen(Modifier.padding(
+                        innerPadding),
+                        matches = state.matches,
+                        viewModel::toggleNotification
+                    )
+                }
+            }
+        }
+    }
+
+    private fun observeActions() {
+        viewModel.action.observe(this) {
+            when (it) {
+                is MainUiAction.MatchesNotFound ->
+                    Toast.makeText(
+                        this,
+                        "Nenhuma partida encontrada no momento",
+                        Toast.LENGTH_LONG).show()
+                is MainUiAction.DisableNotification ->
+                    NotificationMatcherWorker.cancel(applicationContext, it.match)
+                is MainUiAction.EnableNotification ->
+                    NotificationMatcherWorker.start(applicationContext, it.match)
+                MainUiAction.Unexpected ->
+                    Toast.makeText(
+                        this,
+                        "Ops, ocorreu um erro inesperado.",
+                        Toast.LENGTH_LONG).show()
             }
         }
     }
 }
 
 @Composable
-fun MainScreen(matches: List<MatchDomain>) {
+fun MainScreen(
+    modifier: Modifier,
+    matches: List<MatchDomain>,
+    onNotificationOnClick: NotificationOnClick
+) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(8.dp)
     ){
@@ -68,14 +109,14 @@ fun MainScreen(matches: List<MatchDomain>) {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(matches) { match ->
-                MatchInfo(match)
+                MatchInfo(match, onNotificationOnClick)
             }
         }
     }
 }
 
 @Composable
-fun MatchInfo(match: MatchDomain) {
+fun MatchInfo(match: MatchDomain, onNotificationOnClick: NotificationOnClick) {
     Card(
         shape = Shapes.large,
         modifier = Modifier.fillMaxWidth()
@@ -90,7 +131,7 @@ fun MatchInfo(match: MatchDomain) {
             Column(
                 modifier = Modifier.padding(16.dp)
             ) {
-                Notification(match)
+                Notification(match, onNotificationOnClick)
                 Title(match)
                 Teams(match)
             }
@@ -98,7 +139,7 @@ fun MatchInfo(match: MatchDomain) {
     }
 }
 @Composable
-fun Notification(match: MatchDomain) {
+fun Notification(match: MatchDomain, onClick: NotificationOnClick) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.End
@@ -108,7 +149,10 @@ fun Notification(match: MatchDomain) {
 
         Image(
             painter = painterResource(id = drawable),
-            contentDescription = null
+            contentDescription = null,
+            modifier = Modifier.clickable {
+                onClick(match)
+            }
         )
     }
 }

@@ -10,7 +10,6 @@ android {
 
     defaultConfig {
         minSdk 26
-        targetSdk 32
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
@@ -30,6 +29,12 @@ android {
 
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_17.toString()
+    }
+    lint {
+        targetSdk 32
+    }
+    testOptions {
+        targetSdk 32
     }
 }
 
